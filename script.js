@@ -439,52 +439,229 @@ function initCartDrawer() {
 }
 
 // ─────────────────────────────────────────
-// 7. INTEGRAÇÃO WHATSAPP
+// 7. MODAL DE CHECKOUT
 // ─────────────────────────────────────────
 
-const WHATSAPP_NUMBER = '5577981621443'; // Formato internacional sem + ou espaços
-
 /**
- * Monta a mensagem do pedido e abre o WhatsApp
+ * Abre o modal de checkout e preenche o resumo do pedido.
+ * Chamado ao clicar em "Pedir pelo WhatsApp" no drawer ou no FAB.
  */
-function sendWhatsApp() {
+function openCheckoutModal() {
   if (cart.length === 0) {
     showToast('Adicione itens antes de pedir!');
     return;
   }
 
+  // Preenche o resumo dentro do modal
+  const summaryEl = document.getElementById('modalSummary');
+  const totalEl   = document.getElementById('modalTotal');
+
+  summaryEl.innerHTML = '';
+  cart.forEach(item => {
+    const product = MENU.find(p => p.id === item.id);
+    const div = document.createElement('div');
+    div.className = 'modal__summary-item';
+    div.innerHTML = `<span>${item.qty}x ${product.name}</span><span>${formatBRL(product.price * item.qty)}</span>`;
+    summaryEl.appendChild(div);
+  });
+
+  totalEl.textContent = formatBRL(calcTotal());
+
+  // Limpa erros e campos anteriores
+  document.getElementById('modalError').textContent = '';
+  document.querySelectorAll('.modal__input').forEach(i => i.classList.remove('error'));
+
+  // Exibe o modal
+  const overlay = document.getElementById('modalOverlay');
+  overlay.classList.add('active');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+/**
+ * Fecha o modal de checkout
+ */
+function closeCheckoutModal() {
+  const overlay = document.getElementById('modalOverlay');
+  overlay.classList.remove('active');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+/**
+ * Inicializa toda a lógica do modal:
+ * - Mostrar/esconder campo de endereço conforme tipo de entrega
+ * - Mostrar/esconder campo de troco conforme forma de pagamento
+ * - Validação e envio via WhatsApp
+ */
+function initCheckoutModal() {
+  const overlay    = document.getElementById('modalOverlay');
+  const closeBtn   = document.getElementById('modalClose');
+  const confirmBtn = document.getElementById('modalConfirm');
+
+  // Fecha ao clicar no overlay (fora do modal)
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeCheckoutModal();
+  });
+
+  // Fecha ao clicar no X
+  closeBtn.addEventListener('click', closeCheckoutModal);
+
+  // Fecha com Escape
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeCheckoutModal();
+  });
+
+  // ── Tipo de entrega: mostra/oculta campos de endereço ──
+  document.querySelectorAll('input[name="deliveryType"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const addressFields = document.getElementById('addressFields');
+      // Se "retirar no local", esconde o endereço
+      addressFields.style.display = radio.value === 'pickup' ? 'none' : 'flex';
+      addressFields.style.flexDirection = 'column';
+      addressFields.style.gap = '14px';
+    });
+  });
+
+  // ── Pagamento: mostra campo de troco só se "Dinheiro" ──
+  document.querySelectorAll('input[name="payment"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      document.getElementById('changeField').style.display =
+        radio.value === 'dinheiro' ? 'flex' : 'none';
+    });
+  });
+
+  // ── Botão confirmar: valida e envia ──
+  confirmBtn.addEventListener('click', () => {
+    if (validateAndSend()) {
+      closeCheckoutModal();
+    }
+  });
+}
+
+/**
+ * Valida os campos obrigatórios e, se tudo OK, monta e envia a mensagem.
+ * @returns {boolean} true se o envio foi feito, false se há erros
+ */
+function validateAndSend() {
+  const errorEl      = document.getElementById('modalError');
+  const deliveryType = document.querySelector('input[name="deliveryType"]:checked').value;
+  const payment      = document.querySelector('input[name="payment"]:checked').value;
+
+  // Limpa erros anteriores
+  errorEl.textContent = '';
+  document.querySelectorAll('.modal__input').forEach(i => i.classList.remove('error'));
+
+  // Validação de endereço (só para entrega)
+  if (deliveryType === 'delivery') {
+    const name         = document.getElementById('fieldName');
+    const street       = document.getElementById('fieldStreet');
+    const neighborhood = document.getElementById('fieldNeighborhood');
+
+    let hasError = false;
+
+    if (!name.value.trim()) {
+      name.classList.add('error');
+      hasError = true;
+    }
+    if (!street.value.trim()) {
+      street.classList.add('error');
+      hasError = true;
+    }
+    if (!neighborhood.value.trim()) {
+      neighborhood.classList.add('error');
+      hasError = true;
+    }
+
+    if (hasError) {
+      errorEl.textContent = 'Preencha os campos obrigatórios (*) para continuar.';
+      return false;
+    }
+  }
+
+  // Monta a mensagem
+  buildAndSendWhatsApp(deliveryType, payment);
+  return true;
+}
+
+// ─────────────────────────────────────────
+// 8. INTEGRAÇÃO WHATSAPP
+// ─────────────────────────────────────────
+
+const WHATSAPP_NUMBER = '5511999998888'; // Formato internacional sem + ou espaços
+
+/**
+ * Monta a mensagem completa (itens + endereço + pagamento) e abre o WhatsApp
+ * @param {string} deliveryType — 'delivery' | 'pickup'
+ * @param {string} payment      — 'pix' | 'cartao' | 'dinheiro'
+ */
+function buildAndSendWhatsApp(deliveryType, payment) {
+  // ── Itens do pedido ──
   let msg = '🔥 *Olá! Gostaria de fazer este pedido:*\n\n';
+  msg += '*📋 ITENS:*\n';
 
   cart.forEach(item => {
     const product = MENU.find(p => p.id === item.id);
     msg += `• ${item.qty}x ${product.name} — ${formatBRL(product.price * item.qty)}\n`;
   });
 
-  msg += `\n*Total: ${formatBRL(calcTotal())}*`;
-  msg += '\n\nObrigado! 🍔';
+  msg += `\n*Total: ${formatBRL(calcTotal())}*\n`;
+
+  // ── Tipo de entrega ──
+  msg += '\n─────────────────\n';
+  if (deliveryType === 'pickup') {
+    msg += '🏠 *Retirada no local*\n';
+  } else {
+    const name         = document.getElementById('fieldName').value.trim();
+    const street       = document.getElementById('fieldStreet').value.trim();
+    const complement   = document.getElementById('fieldComplement').value.trim();
+    const neighborhood = document.getElementById('fieldNeighborhood').value.trim();
+
+    msg += `🛵 *Entrega*\n`;
+    msg += `👤 Nome: ${name}\n`;
+    msg += `📍 Endereço: ${street}`;
+    if (complement) msg += `, ${complement}`;
+    msg += `\n🏘️ Bairro: ${neighborhood}\n`;
+  }
+
+  // ── Forma de pagamento ──
+  const paymentLabels = { pix: '💠 PIX', cartao: '💳 Cartão na entrega', dinheiro: '💵 Dinheiro' };
+  msg += `\n💳 *Pagamento:* ${paymentLabels[payment]}\n`;
+
+  // Troco (só se dinheiro)
+  if (payment === 'dinheiro') {
+    const changeVal = document.getElementById('fieldChange').value;
+    if (changeVal) {
+      msg += `🪙 Troco para: R$ ${Number(changeVal).toFixed(2).replace('.', ',')}\n`;
+    }
+  }
+
+  msg += '\nObrigado! 🍔';
 
   const encoded = encodeURIComponent(msg);
   window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}`, '_blank');
 }
 
+/**
+ * Inicializa os botões que abrem o modal de checkout
+ */
 function initWhatsApp() {
-  // Botão dentro do drawer
-  document.getElementById('whatsappOrder').addEventListener('click', sendWhatsApp);
+  // Botão dentro do drawer do carrinho
+  document.getElementById('whatsappOrder').addEventListener('click', openCheckoutModal);
 
-  // FAB flutuante (abre o carrinho se vazio, senão manda direto)
+  // FAB flutuante
   document.getElementById('fabWhatsapp').addEventListener('click', e => {
     e.preventDefault();
     if (cart.length === 0) {
-      // Scroll suave ao menu se carrinho vazio
       document.getElementById('menu').scrollIntoView({ behavior: 'smooth' });
     } else {
-      sendWhatsApp();
+      openCheckoutModal();
     }
   });
 }
 
 // ─────────────────────────────────────────
-// 8. UTILITÁRIOS
+// 9. UTILITÁRIOS
 // ─────────────────────────────────────────
 
 let toastTimeout;
@@ -494,7 +671,6 @@ let toastTimeout;
  * @param {string} message
  */
 function showToast(message) {
-  // Remove toast anterior se existir
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
   clearTimeout(toastTimeout);
@@ -504,7 +680,6 @@ function showToast(message) {
   toast.textContent = message;
   document.body.appendChild(toast);
 
-  // Força reflow para animar
   requestAnimationFrame(() => {
     requestAnimationFrame(() => toast.classList.add('show'));
   });
@@ -516,22 +691,16 @@ function showToast(message) {
 }
 
 // ─────────────────────────────────────────
-// 9. INICIALIZAÇÃO
+// 10. INICIALIZAÇÃO
 // ─────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Renderiza categoria inicial (hambúrgueres)
   renderProducts('burgers');
-
-  // Inicializa abas
   initCategoryTabs();
-
-  // Inicializa carrinho
   initCartDrawer();
   updateCartUI();
-
-  // Inicializa WhatsApp
   initWhatsApp();
+  initCheckoutModal();
 
   console.log('🔥 BRASA — Cardápio carregado com sucesso!');
 });
