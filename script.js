@@ -442,7 +442,7 @@ function initCartDrawer() {
 // 7. INTEGRAÇÃO WHATSAPP
 // ─────────────────────────────────────────
 
-const WHATSAPP_NUMBER = '5511999998888'; // Formato internacional sem + ou espaços
+const WHATSAPP_NUMBER = '5577981621443'; // Formato internacional sem + ou espaços
 
 /**
  * Monta a mensagem do pedido e abre o WhatsApp
