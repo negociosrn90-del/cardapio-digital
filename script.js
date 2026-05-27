@@ -588,7 +588,7 @@ function validateAndSend() {
 // 8. INTEGRAÇÃO WHATSAPP
 // ─────────────────────────────────────────
 
-const WHATSAPP_NUMBER = '5511999998888'; // Formato internacional sem + ou espaços
+const WHATSAPP_NUMBER = '5577981621443'; // Formato internacional sem + ou espaços
 
 /**
  * Monta a mensagem completa (itens + endereço + pagamento) e abre o WhatsApp
